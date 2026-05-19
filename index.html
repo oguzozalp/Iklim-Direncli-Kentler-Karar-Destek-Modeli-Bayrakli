@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>İklim Dirençli Kentler KDS - Bayraklı</title>
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+    
+    <style>
+        :root {
+            --bg-color: rgba(22, 24, 28, 0.95);
+            --bg-blur: blur(12px);
+            --text-color: #f1f2f6;
+            --text-muted: #a4b0be;
+            --primary-color: #2ed573;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --panel-bg: rgba(47, 53, 66, 0.4);
+            --hover-bg: rgba(255, 255, 255, 0.05);
+            --shadow: 0 10px 30px rgba(0,0,0,0.6);
+            --map-style: 'mapbox://styles/mapbox/dark-v11';
+            
+            /* Popup Variables */
+            --popup-bg: rgba(30, 39, 46, 0.95);
+            --popup-text: #f1f2f6;
+        }
+
+        .light-theme {
+            --bg-color: rgba(255, 255, 255, 0.95);
+            --text-color: #2f3542;
+            --text-muted: #747d8c;
+            --primary-color: #2ed573;
+            --border-color: rgba(0, 0, 0, 0.1);
+            --panel-bg: rgba(241, 242, 246, 0.6);
+            --hover-bg: rgba(0, 0, 0, 0.05);
+            --shadow: 0 10px 30px rgba(0,0,0,0.15);
+            --map-style: 'mapbox://styles/mapbox/light-v11';
+            
+            --popup-bg: rgba(255, 255, 255, 0.98);
+            --popup-text: #2f3542;
+        }
+
+        body { margin: 0; padding: 0; font-family: 'Inter', 'Segoe UI', sans-serif; background-color: #111; overflow: hidden; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; transition: opacity 0.3s; }
+        
+        .floating-panel {
+            position: absolute;
+            background: var(--bg-color);
+            backdrop-filter: var(--bg-blur);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            color: var(--text-color);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+        }
+
+        .panel-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-header h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+        
+        .panel-content { padding: 15px 20px; overflow-y: auto; max-height: 70vh; }
+
+        /* Custom Scrollbar */
+        .panel-content::-webkit-scrollbar { width: 6px; }
+        .panel-content::-webkit-scrollbar-track { background: transparent; }
+        .panel-content::-webkit-scrollbar-thumb { background: rgba(128, 128, 128, 0.4); border-radius: 3px; }
+
+        /* Sol Üst Panel: Katmanlar */
+        #layer-panel { top: 20px; left: 20px; width: 340px; }
+
+        .layer-group { margin-bottom: 20px; }
+        .layer-group-title { font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;}
+
+        .layer-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 15px; margin-bottom: 6px;
+            background: var(--panel-bg); border-radius: 8px;
+            cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+        }
+        .layer-item:hover { background: var(--hover-bg); border-color: var(--border-color); }
+        .layer-item.active { border-color: var(--primary-color); background: rgba(46, 213, 115, 0.1); }
+        
+        .layer-name { font-size: 0.9rem; font-weight: 500; }
+        .layer-status { font-size: 0.75rem; color: var(--primary-color); font-weight: 600; opacity: 0; transition: opacity 0.2s; }
+        .layer-item.active .layer-status { opacity: 1; }
+
+        .ahp-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .ahp-table td { padding: 8px 4px; border-bottom: 1px solid var(--border-color); }
+        .ahp-table tr:last-child td { border-bottom: none; }
+        .ahp-weight { font-weight: bold; color: var(--primary-color); text-align: center; width: 45px;}
+        .ahp-name { font-weight: 600; }
+        .ahp-desc { color: var(--text-muted); font-size: 0.8rem;}
+
+        /* Lejant: Sağ Alt */
+        #legend-panel { 
+            position: absolute; bottom: 30px; right: 20px; 
+            width: 250px;
+        }
+        .legend-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 12px; color: var(--primary-color); }
+        .legend-item { display: flex; align-items: center; margin-bottom: 8px; font-size: 0.85rem;}
+        .color-box { width: 16px; height: 16px; margin-right: 12px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);}
+        
+        /* Tema Butonu: Sağ Üst */
+        #theme-toggle-btn {
+            position: absolute; top: 20px; right: 20px; z-index: 10;
+            background: var(--bg-color); backdrop-filter: var(--bg-blur);
+            border: 1px solid var(--border-color); border-radius: 50%;
+            width: 45px; height: 45px; display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem; cursor: pointer; box-shadow: var(--shadow); transition: all 0.3s;
+            color: var(--text-color);
+        }
+        #theme-toggle-btn:hover { transform: scale(1.1); }
+
+        /* Yükleme Ekranı */
+        .loading-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-color); z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: var(--text-color); transition: opacity 0.5s;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid var(--border-color);
+            border-top: 3px solid var(--primary-color); border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Mapbox Popup Styling Özelleştirmeleri */
+        .mapboxgl-popup-content {
+            background: var(--popup-bg) !important;
+            color: var(--popup-text) !important;
+            border-radius: 10px !important;
+            border: 1px solid var(--border-color) !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5) !important;
+            padding: 15px !important;
+            font-family: 'Inter', sans-serif !important;
+        }
+        .mapboxgl-popup-tip {
+            border-top-color: var(--popup-bg) !important;
+            border-bottom-color: var(--popup-bg) !important;
+        }
+        .mapboxgl-popup-close-button {
+            color: var(--text-muted);
+            font-size: 16px;
+            padding: 5px 8px;
+        }
+        .mapboxgl-popup-close-button:hover {
+            color: var(--primary-color);
+            background: none;
+        }
+        .popup-stat { margin-bottom: 5px; font-size: 0.9rem;}
+        .popup-stat strong { font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div id="loading" class="loading-overlay">
+    <div class="spinner"></div>
+    <h2 style="margin:0; font-size: 1.2rem;">Veriler Yükleniyor...</h2>
+    <p style="margin-top:8px; font-size: 0.9rem; color: var(--text-muted);">Lütfen bekleyin, harita katmanları oluşturuluyor</p>
+</div>
+
+<!-- Tema Değiştirme Butonu -->
+<button id="theme-toggle-btn" onclick="toggleTheme()" title="Açık/Koyu Tema">🌙</button>
+
+<!-- Sol Panel 1: Katmanlar -->
+<div id="layer-panel" class="floating-panel">
+    <div class="panel-header">
+        <h2>Katmanlar</h2>
+    </div>
+    <div class="panel-content">
+        
+        <div class="layer-group">
+            <div class="layer-group-title">Temel Girdiler</div>
+            <div class="layer-item active" id="btn-ndvi" onclick="setActiveLayer('ndvi')">
+                <span class="layer-name">Karbon Yutak (NDVI)</span>
+                <span class="layer-status">Açık</span>
+            </div>
+            <div class="layer-item" id="btn-lst" onclick="setActiveLayer('lst')">
+                <span class="layer-name">Yüzey Sıcaklığı (LST)</span>
+                <span class="layer-status">Açık</span>
+            </div>
+            <div class="layer-item" id="btn-demographic" onclick="setActiveLayer('demographic')">
+                <span class="layer-name">Demografik Veri (Nüfus)</span>
+                <span class="layer-status">Açık</span>
+            </div>
+        </div>
+
+        <div class="layer-group">
+            <div class="layer-group-title">Karbon Risk İndeksleri</div>
+            <div class="layer-item" id="btn-mikroklima" onclick="setActiveLayer('mikroklima')">
+                <span class="layer-name">Mikroklima İndeksi</span>
+                <span class="layer-status">Açık</span>
+            </div>
+            <div class="layer-item" id="btn-yapisal" onclick="setActiveLayer('yapisal')">
+                <span class="layer-name">Yapısal İndeks</span>
+                <span class="layer-status">Açık</span>
+            </div>
+            <div class="layer-item" id="btn-ulasim" onclick="setActiveLayer('ulasim')">
+                <span class="layer-name">Ulaşım İndeksi</span>
+                <span class="layer-status">Açık</span>
+            </div>
+            <div class="layer-item" id="btn-karbonrisk" onclick="setActiveLayer('karbonrisk')" style="border-left: 3px solid var(--primary-color);">
+                <span class="layer-name" style="font-weight: 700;">Bütünleşik Karbon Risk</span>
+                <span class="layer-status">Açık</span>
+            </div>
+        </div>
+
+        <div class="layer-group">
+            <div class="layer-group-title">Model ve Sınıflandırma</div>
+            <div class="layer-item" id="btn-kmeans" onclick="setActiveLayer('kmeans')">
+                <span class="layer-name">AI Risk Kümeleri</span>
+                <span class="layer-status">Açık</span>
+            </div>
+            <div class="layer-item" id="btn-3d" onclick="setActiveLayer('3d')">
+                <span class="layer-name">3B Kentsel Morfoloji</span>
+                <span class="layer-status">Açık</span>
+            </div>
+        </div>
+        <div class="layer-group" style="margin-bottom: 5px;">
+            <details style="background: var(--panel-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                <summary style="cursor: pointer; padding: 10px 15px; font-weight: 700; color: var(--text-color); font-size: 0.85rem; outline: none; user-select: none;">
+                    AHP AĞIRLIKLARI BİLGİSİ
+                </summary>
+                <div style="padding: 10px; background: rgba(0,0,0,0.1); border-top: 1px solid var(--border-color);">
+                    <table class="ahp-table">
+                        <tr><td class="ahp-name">n_yol</td><td class="ahp-weight">0.25</td><td class="ahp-desc">Altınyol transit etkisi</td></tr>
+                        <tr><td class="ahp-name">n_bina</td><td class="ahp-weight">0.20</td><td class="ahp-desc">Yüksek katlı yapılaşma</td></tr>
+                        <tr><td class="ahp-name">n_LST</td><td class="ahp-weight">0.20</td><td class="ahp-desc">Isı adası riski</td></tr>
+                        <tr><td class="ahp-name">n_trafik</td><td class="ahp-weight">0.15</td><td class="ahp-desc">Emisyon yoğunluğu</td></tr>
+                        <tr><td class="ahp-name">n_sanayi</td><td class="ahp-weight">0.08</td><td class="ahp-desc">Dönüşüm bölgesi sanayisi</td></tr>
+                        <tr><td class="ahp-name">n_nufus</td><td class="ahp-weight">0.07</td><td class="ahp-desc">Maruziyet çarpanı</td></tr>
+                        <tr><td class="ahp-name">n_otopark</td><td class="ahp-weight">0.05</td><td class="ahp-desc">Rölanti emisyonu</td></tr>
+                        <tr><td class="ahp-name">n_NDVI</td><td class="ahp-weight" style="color:#ff4757;">-0.15</td><td class="ahp-desc">Karbon yutağı</td></tr>
+                    </table>
+                </div>
+            </details>
+        </div>
+        
+    </div>
+</div>
+
+<!-- Sağ Alt: Lejant -->
+<div id="legend-panel" class="floating-panel">
+    <div class="panel-content" style="padding: 15px;">
+        <div class="legend-title" id="legend-title">Aktif Lejant</div>
+        <div id="legend-content"></div>
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script>
+    mapboxgl.accessToken = 'pk.eyJ1Ijoib2d1em96YWxwIiwiYSI6ImNtbXhpY3h6NDMwN2wycnMya3picHV0OW4ifQ.dQ0unoi08Pl-nsh_XLRcWQ';
+
+    let isDarkTheme = true;
+    let map;
+
+    // Ortak Renk Skalası ve Aralıkları (0-100 aralığındaki indeksler için)
+    const indexStops = [
+        0, '#1a9850',   // Düşük Risk (Yeşil)
+        25, '#a6d96a',  // Açık Yeşil
+        50, '#ffffbf',  // Orta Risk (Sarı)
+        75, '#fdae61',  // Yüksek Risk (Turuncu)
+        100, '#d73027'  // Çok Yüksek Risk (Kırmızı)
+    ];
+
+    const unifiedIndexLegend = {
+        items: [
+            { color: '#1a9850', label: '0-25 (Düşük Risk)' },
+            { color: '#a6d96a', label: '25-50' },
+            { color: '#ffffbf', label: '50-75 (Orta Risk)' },
+            { color: '#fdae61', label: '75-100' },
+            { color: '#d73027', label: '100+ (Yüksek Risk)' }
+        ]
+    };
+
+    // Lejant verileri
+    const legends = {
+        'ndvi': {
+            title: 'Karbon Yutak (NDVI)',
+            items: [
+                { color: '#e74c3c', label: 'Riskli Alanlar (Beton/Su)' },
+                { color: '#f1c40f', label: 'Zayıf Yutak (Seyrek Ot)' },
+                { color: '#2ecc71', label: 'Orta Yutak (Parklar)' },
+                { color: '#27ae60', label: 'Güçlü Yutak (Orman)' }
+            ]
+        },
+        'lst': {
+            title: 'Yüzey Sıcaklığı (LST)',
+            items: [
+                { color: '#313695', label: '< 22 °C (Serin)' },
+                { color: '#74add1', label: '22 - 24 °C' },
+                { color: '#ffffbf', label: '24 - 26 °C' },
+                { color: '#f46d43', label: '26 - 28 °C' },
+                { color: '#a50026', label: '> 28 °C (Çok Sıcak)' }
+            ]
+        },
+        'kmeans': {
+            title: 'AI Risk Kümeleri',
+            items: [
+                { color: '#1a9850', label: 'Risk Grubu 1' },
+                { color: '#91cf60', label: 'Risk Grubu 2' },
+                { color: '#d9ef8b', label: 'Risk Grubu 3' },
+                { color: '#fee08b', label: 'Risk Grubu 4' },
+                { color: '#fc8d59', label: 'Risk Grubu 5' },
+                { color: '#d73027', label: 'Risk Grubu 6' }
+            ]
+        },
+        '3d': {
+            title: 'Bina Risk Durumu (3B)',
+            items: unifiedIndexLegend.items
+        },
+        'demographic': {
+            title: 'Nüfus Yoğunluğu',
+            items: [
+                { color: '#f7fcf0', label: '< 1000 Kişi' },
+                { color: '#e0f3db', label: '1000 - 5000' },
+                { color: '#ccebc5', label: '5000 - 10000' },
+                { color: '#a8ddb5', label: '10000 - 15000' },
+                { color: '#4eb3d3', label: '> 15000 Kişi' }
+            ]
+        },
+        'mikroklima': { title: 'Mikroklima İndeksi', items: unifiedIndexLegend.items },
+        'yapisal': { title: 'Yapısal İndeks', items: unifiedIndexLegend.items },
+        'ulasim': { title: 'Ulaşım İndeksi', items: unifiedIndexLegend.items },
+        'karbonrisk': { title: 'Bütünleşik Karbon Risk', items: unifiedIndexLegend.items }
+    };
+
+    function initMap() {
+        const style = getComputedStyle(document.body).getPropertyValue('--map-style').trim().replace(/'/g, "");
+        
+        map = new mapboxgl.Map({
+            container: 'map',
+            style: style,
+            center: [27.165, 38.460],
+            zoom: 13,
+            pitch: 0,
+            bearing: -15
+        });
+
+        map.on('load', () => {
+            
+            // Harita üzerindeki isimlerin/yolların her zaman renkli katmanların ÜSTÜNDE olması için:
+            const layers = map.getStyle().layers;
+            let firstSymbolId;
+            for (let i = 0; i < layers.length; i++) {
+                if (layers[i].type === 'symbol' || layers[i].id.includes('-label')) {
+                    firstSymbolId = layers[i].id;
+                    break;
+                }
+            }
+
+            // Grid Kaynağı (NDVI, LST, KMeans, Nüfus, ve yeni indeksler)
+            map.addSource('grid-source', { type: 'geojson', data: './karbon_risk_index_grid.geojson' });
+            
+            // 1. Temel Katmanlar
+            map.addLayer({
+                'id': 'layer-ndvi', 'type': 'fill', 'source': 'grid-source', 'layout': { 'visibility': 'visible' },
+                'paint': { 'fill-color': ['interpolate', ['linear'], ['coalesce', ['get', 'NDVI_mean'], 0], 0.0, '#e74c3c', 0.15, '#f1c40f', 0.3, '#2ecc71', 0.5, '#27ae60'], 'fill-opacity': 0.65 }
+            }, firstSymbolId);
+
+            map.addLayer({
+                'id': 'layer-lst', 'type': 'fill', 'source': 'grid-source', 'layout': { 'visibility': 'none' },
+                'paint': { 'fill-color': ['interpolate', ['linear'], ['coalesce', ['get', 'LST_mean'], 20], 20, '#313695', 22, '#74add1', 24, '#ffffbf', 26, '#f46d43', 29, '#a50026'], 'fill-opacity': 0.65 }
+            }, firstSymbolId);
+
+            map.addLayer({
+                'id': 'layer-demographic', 'type': 'fill', 'source': 'grid-source', 'layout': { 'visibility': 'none' },
+                'paint': { 'fill-color': ['interpolate', ['linear'], ['coalesce', ['get', 'nufus'], 0], 0, '#f7fcf0', 1000, '#e0f3db', 5000, '#ccebc5', 10000, '#a8ddb5', 20000, '#4eb3d3'], 'fill-opacity': 0.65 }
+            }, firstSymbolId);
+
+            // 2. Karbon Risk İndeksleri (Ortak Skala)
+            map.addLayer({
+                'id': 'layer-mikroklima', 'type': 'fill', 'source': 'grid-source', 'layout': { 'visibility': 'none' },
+                'paint': { 'fill-color': ['interpolate', ['linear'], ['coalesce', ['get', 'mikroklima_indeks'], 0], ...indexStops], 'fill-opacity': 0.75 }
+            }, firstSymbolId);
+
+            map.addLayer({
+                'id': 'layer-yapisal', 'type': 'fill', 'source': 'grid-source', 'layout': { 'visibility': 'none' },
+                'paint': { 'fill-color': ['interpolate', ['linear'], ['coalesce', ['get', 'yapi_indeks'], 0], ...indexStops], 'fill-opacity': 0.75 }
+            }, firstSymbolId);
+
+            map.addLayer({
+                'id': 'layer-ulasim', 'type': 'fill', 'source': 'grid-source', 'layout': { 'visibility': 'none' },
+                'paint': { 'fill-color': ['interpolate', ['linear'], ['coalesce', ['get', 'ulasim_indeks'], 0], ...indexStops], 'fill-opacity': 0.75 }
+            }, firstSymbolId);
+
+            map.addLayer({
+                'id': 'layer-karbonrisk', 'type': 'fill', 'source': 'grid-source', 'layout': { 'visibility': 'none' },
+                'paint': { 'fill-color': ['interpolate', ['linear'], ['coalesce', ['get', 'karbon_risk_v2'], 0], ...indexStops], 'fill-opacity': 0.8 }
+            }, firstSymbolId);
+
+            // 3. Modeller ve 3B
+            map.addLayer({
+                'id': 'layer-kmeans', 'type': 'fill', 'source': 'grid-source', 'layout': { 'visibility': 'none' },
+                'paint': {
+                    'fill-color': ['match', ['get', 'kume_etiket'], 'Risk Grubu 1', '#1a9850', 'Risk Grubu 2', '#91cf60', 'Risk Grubu 3', '#d9ef8b', 'Risk Grubu 4', '#fee08b', 'Risk Grubu 5', '#fc8d59', 'Risk Grubu 6', '#d73027', '#808080'],
+                    'fill-opacity': 0.65
+                }
+            }, firstSymbolId);
+
+            map.addSource('buildings-source', { type: 'geojson', data: './binalar_wgs84.geojson' });
+            map.addLayer({
+                'id': 'layer-3d', 'type': 'fill-extrusion', 'source': 'buildings-source', 'layout': { 'visibility': 'none' },
+                'paint': {
+                    'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'bina_risk'], 0], ...indexStops],
+                    'fill-extrusion-height': ['*', ['coalesce', ['get', 'akilli_kat'], 1], 3],
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-opacity': 0.95
+                }
+            });
+
+            // Yükleme ekranını kaldır
+            document.getElementById('loading').style.opacity = '0';
+            setTimeout(() => document.getElementById('loading').style.display = 'none', 500);
+
+            // Başlangıç lejantını ayarla
+            updateLegend('ndvi');
+            setupBuildingInteraction();
+            
+            // Eğer 3B seçiliyken tema değiştiyse, kamerayı tekrar ayarla
+            const activeLayer = document.querySelector('.layer-item.active').id.replace('btn-', '');
+            if(activeLayer === '3d') { map.flyTo({ pitch: 60, zoom: 14 }); }
+        });
+    }
+
+    function setupBuildingInteraction() {
+        // Binaya tıklanınca Popup Aç
+        map.on('click', 'layer-3d', (e) => {
+            if (!e.features.length) return;
+            const props = e.features[0].properties;
+            
+            const html = `
+                <div style="min-width: 200px;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 1.1rem; color: var(--primary-color);">Bina Analizi</h3>
+                    
+                    <div class="popup-stat"><strong>Bina Risk Skoru:</strong> ${props.bina_risk ? props.bina_risk.toFixed(1) : '-'} / 100</div>
+                    <div class="popup-stat"><strong>Kat Sayısı:</strong> ${props.akilli_kat || '-'} Kat</div>
+                    <div class="popup-stat"><strong>Taban Alanı:</strong> ${props.taban_alani_m2 ? props.taban_alani_m2.toFixed(1) : '-'} m²</div>
+                    
+                    <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 12px 0;">
+                    
+                    <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 5px;">BÖLGESEL ETKİ DEĞERLERİ</div>
+                    <div class="popup-stat"><strong>Bütünleşik Karbon Riski:</strong> ${props.karbon_risk_v2 ? props.karbon_risk_v2.toFixed(1) : '-'}</div>
+                    <div class="popup-stat"><strong>Mikroklima İndeksi:</strong> ${props.mikroklima_indeks ? props.mikroklima_indeks.toFixed(1) : '-'}</div>
+                    <div class="popup-stat"><strong>Ulaşım İndeksi:</strong> ${props.ulasim_indeks ? props.ulasim_indeks.toFixed(1) : '-'}</div>
+                </div>
+            `;
+            
+            new mapboxgl.Popup({ offset: [0, -10] })
+                .setLngLat(e.lngLat)
+                .setHTML(html)
+                .addTo(map);
+        });
+
+        // Hover efektleri (Cursor pointer yapma)
+        map.on('mouseenter', 'layer-3d', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'layer-3d', () => { map.getCanvas().style.cursor = ''; });
+    }
+
+    function toggleTheme() {
+        isDarkTheme = !isDarkTheme;
+        document.body.classList.toggle('light-theme');
+        document.getElementById('theme-toggle-btn').innerText = isDarkTheme ? '🌙' : '☀️';
+        
+        const newStyle = isDarkTheme ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+        
+        document.getElementById('loading').style.display = 'flex';
+        document.getElementById('loading').style.opacity = '1';
+        map.setStyle(newStyle);
+        
+        map.once('style.load', () => {
+            map.remove();
+            initMap();
+            setTimeout(() => {
+                const activeBtn = document.querySelector('.layer-item.active');
+                if(activeBtn) {
+                    const layerId = activeBtn.id.replace('btn-', '');
+                    setActiveLayer(layerId);
+                }
+            }, 1000);
+        });
+    }
+
+    function updateLegend(layerKey) {
+        const legendData = legends[layerKey];
+        document.getElementById('legend-title').innerText = legendData.title;
+        
+        const contentHtml = legendData.items.map(item => `
+            <div class="legend-item">
+                <div class="color-box" style="background: ${item.color};"></div>
+                ${item.label}
+            </div>
+        `).join('');
+        
+        document.getElementById('legend-content').innerHTML = contentHtml;
+    }
+
+    function setActiveLayer(selectedLayer) {
+        document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('active'));
+        document.getElementById('btn-' + selectedLayer).classList.add('active');
+
+        // Sitedeki tüm tanımlı layer id'leri
+        const allLayers = [
+            'layer-ndvi', 'layer-lst', 'layer-demographic', 
+            'layer-mikroklima', 'layer-yapisal', 'layer-ulasim', 'layer-karbonrisk',
+            'layer-kmeans', 'layer-3d'
+        ];
+        
+        allLayers.forEach(layerId => {
+            if (map.getLayer(layerId)) {
+                map.setLayoutProperty(layerId, 'visibility', layerId === 'layer-' + selectedLayer ? 'visible' : 'none');
+            }
+        });
+        
+        // 3B modu için harita açısını ayarla
+        if(selectedLayer === '3d') {
+            map.flyTo({ pitch: 60, zoom: 15 });
+        } else {
+            map.flyTo({ pitch: 0 }); 
+        }
+
+        updateLegend(selectedLayer);
+    }
+
+    // İlk başlatma
+    initMap();
+
+</script>
+</body>
+</html>

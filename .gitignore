@@ -1,0 +1,8 @@
+# Ignore everything
+*
+
+# But not these files
+!index.html
+!karbon_risk_index_grid.geojson
+!binalar_wgs84.geojson
+!.gitignore
