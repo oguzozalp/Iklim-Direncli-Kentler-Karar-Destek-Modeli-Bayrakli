@@ -1,4 +1,5 @@
 İklim Dirençli Kentler: Karar Destek Modeli ve 3B Kentsel Morfoloji Uygulaması
+
 Bu proje, İzmir Bayraklı bölgesi için iklim değişikliğine uyum sağlamayı, kentsel ısı adası etkilerini analiz etmeyi ve kentsel dönüşüm süreçlerinde "Karbon Risk Skoru" temelli veri odaklı kararlar almayı hedefleyen bir Web tabanlı CBS (Web-GIS) uygulamasıdır.
 
 🚀 Proje Hakkında
